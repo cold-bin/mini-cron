@@ -4,7 +4,7 @@
 package main
 
 import (
-	errors "errors"
+	"errors"
 	"reflect"
 )
 
