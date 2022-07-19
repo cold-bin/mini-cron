@@ -5,6 +5,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"reflect"
 	"time"
@@ -37,14 +38,14 @@ func NewTimeWheel(slotNum, dPerSlot int, unitTime time.Duration) (tw *TimeWheel)
 	tw.DurationPerSlot = dPerSlot
 	tw.StartTime = time.Now()
 	tw.CurTime = time.Now()
-	tw.Slots = make([]*WorkTicker, slotNum, slotNum)
+	tw.Slots = make([]*WorkTicker, slotNum, slotNum*2)
 	tw.SlotsNum = slotNum
 	tw.StopSignal = make(chan bool)
 	tw.UnitTime = unitTime
 	tw.TickerWheel = time.NewTicker(unitTime)
 	//初始化槽位
-	for i := 0; i < len(tw.Slots); i++ {
-		tw.Slots = append(tw.Slots, &WorkTicker{})
+	for i := 0; i < slotNum; i++ {
+		tw.Slots[i] = &WorkTicker{}
 	}
 
 	tw.CurSlot = 0
@@ -53,27 +54,20 @@ func NewTimeWheel(slotNum, dPerSlot int, unitTime time.Duration) (tw *TimeWheel)
 
 func (tw *TimeWheel) AddWorkTicker(wt *WorkTicker) {
 	//检验
-	if wt.StartTime < 0 || wt.ExpireDuration < 0 || wt.StartTime >= wt.ExpireDuration {
+	if wt.ExpireDuration < 0 {
 		log.Println("time is wrong.")
 		return
 	}
-	//选择槽位
-	tickets := wt.ExpireDuration - wt.StartTime
-	//类似拉链法选择槽位：当前槽位往后偏移
-	slotLoc := (tw.CurSlot + tickets/tw.DurationPerSlot) % tw.SlotsNum
-	//在槽位处添加定时器
-	for i := 0; i < tw.SlotsNum; i++ {
-		//此处拉链
-		if i == slotLoc {
-			tmp := tw.Slots[i]
-			for tmp.Next != nil {
-				tmp = tmp.Next
-			}
-			tmp.Next = wt
-			wt.Prev = tmp
-			break
-		}
+	//选择槽位 类似拉链法选择槽位：当前槽位往后偏移
+	slotLoc := (tw.CurSlot + wt.ExpireDuration/tw.DurationPerSlot) % tw.SlotsNum
+
+	//在槽位处添加定时器，此处拉链
+	tmp := tw.Slots[slotLoc]
+	for tmp.Next != nil {
+		tmp = tmp.Next
 	}
+	tmp.Next = wt
+	wt.Prev = tmp
 }
 
 // DelALLWorkTicker 删除在当前after个单位时间之后的的所有定时任务
@@ -85,65 +79,45 @@ func (tw *TimeWheel) DelALLWorkTicker(after int) {
 
 	slotLoc := (tw.CurSlot + after) % tw.SlotsNum
 	//在槽位处删除所有定时器
-	for i := 0; i < tw.SlotsNum; i++ {
-		//此处拉链
-		if i == slotLoc {
-			if tw.Slots[i].Next != nil {
-				prev := tw.Slots[i]
-				next := tw.Slots[i].Next
-				prev.Next = nil
-				next.Prev = nil
-			}
-			break
-		}
+	if tw.Slots[slotLoc].Next != nil {
+		prev := tw.Slots[slotLoc]
+		next := tw.Slots[slotLoc].Next
+		prev.Next = nil
+		next.Prev = nil
 	}
 }
 
-// DelOneWorkTicker 删除在当前after个单位时间之后的的某个定时任务
-func (tw *TimeWheel) DelOneWorkTicker(after int, fMap map[string]reflect.Value) (err error) {
+// DelOneWorkTicker 删除在当前after个单位时间之后的的某个定时任务，该空接口接收一个函数类型
+func (tw *TimeWheel) DelOneWorkTicker(after int, f interface{}) (err error) {
 	if after <= 0 {
 		err = errors.New("the after time is wrong")
 		return
 	}
+	typeOfF := reflect.TypeOf(f)
+	//如果不是函数类型，不支持定时任务
+	if typeOfF.Kind() != reflect.Func {
+		err = errors.New("the interface don't accepted the Func type")
+		return
+	}
 
 	slotLoc := (tw.CurSlot + after) % tw.SlotsNum
-	//取出需要找的定时器任务
-	key1 := ""
-	var value1 reflect.Value
-	for key1 = range fMap {
-		ok := false
-		var v reflect.Value
-		if v, ok = fMap[key1]; !ok {
-			log.Println("not exist the key: ", v)
+
+	//在槽位处删除指定定时器
+	tmp := tw.Slots[slotLoc].Next
+	for tmp != nil {
+		if reflect.DeepEqual(tmp.Func, f) {
+			if tmp.Next == nil {
+				tmp.Prev.Next = nil
+				tmp.Prev = nil
+				return
+			}
+			tmp.Next = tmp.Prev
+			tmp.Prev = tmp
 			return
 		}
-		value1 = v
+		tmp = tmp.Next
 	}
-	//在槽位处删除指定定时器
-	for i := 0; i < tw.SlotsNum; i++ {
-		//此处拉链
-		if i == slotLoc {
-			tmp := tw.Slots[i]
-			for tmp != nil {
-				if v, ok := tmp.FuncMap[key1]; ok {
-					if v == value1 {
-						//找到该定时任务
-						if tmp.Next != nil {
-							tmp.Next = tmp.Prev
-							tmp.Prev = tmp
-							return
-						}
-						tmp.Prev.Next = nil
-						tmp.Prev = nil
-						return
-					}
-				}
-				tmp = tmp.Next
-			}
-			break
-		}
-	}
-	return errors.New("not found the work")
+	return errors.New("not found the work func")
 }
 
 func (tw *TimeWheel) Stop() {
@@ -154,42 +128,34 @@ func (tw *TimeWheel) Stop() {
 func (tw *TimeWheel) Start() {
 	defer func() {
 		close(tw.StopSignal)
-		for _, v := range tw.Slots {
-			tmp := v
-			for tmp != nil {
-				for key := range tmp.FuncMap {
-					if _, ok := tmp.FuncMap[key]; ok {
-						delete(tmp.FuncMap, key)
-					}
-				}
-				tmp = tmp.Next
-			}
-		}
+		tw.TickerWheel.Stop()
 	}()
 
 	for {
 		select {
 		case <-tw.StopSignal: //结束信号
+			fmt.Println("stop over...")
 			return
 		case <-tw.TickerWheel.C: //时钟滴答一次，进一个槽位
 			tw.CurSlot++
 			tw.CurSlot = tw.CurSlot % tw.SlotsNum
-			//todo 将当前定时器里的任务提取出来，依次执行
-			for i := 0; i < tw.SlotsNum; i++ {
-				wt := tw.Slots[i]
-				tmp := wt
-				for tmp != nil {
-					values, err := tmp.Execute()
-					if err != nil {
-						log.Println(err)
-					}
-					//打印结果至终端
-					log.Println(values)
-					tmp = tmp.Next
+			//将当前定时器的挂载链表取出来，不包括头节点
+			wt := tw.Slots[tw.CurSlot]
+			tmp := wt.Next
+			for tmp != nil {
+				values, err := tmp.Execute()
+				if err != nil {
+					fmt.Println(err)
 				}
+				//打印结果至终端
+				for _, v := range values {
+					fmt.Println("values: ", v.Int())
+				}
+				//fmt.Println("values: ", values[0].Int())
+				tmp = tmp.Next
 			}
+			fmt.Println("嘀嗒...")
 		default:
-			return
 		}
 	}
 }
@@ -197,4 +163,5 @@ func (tw *TimeWheel) Start() {
 func (tw *TimeWheel) Reset() {
 	tw.CurSlot = 0
 	tw.StartTime = time.Now()
+	tw.TickerWheel.Reset(tw.UnitTime)
 }

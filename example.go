@@ -9,42 +9,40 @@ import (
 	"time"
 )
 
-type ControllerMapsType map[string]reflect.Value
-
-var ControllerMaps ControllerMapsType
-
-type Routers struct {
+func add(a, b int) int {
+	return a + b
 }
 
-func (this *Routers) Login(msg string) {
-	fmt.Println("Login:", msg)
+func sub(a, b int) int {
+	return a - b
 }
 
-func (this *Routers) ChangeName(msg *string) {
-	fmt.Println("ChangeName:", *msg)
-	*msg = *msg + " Changed"
+func old(a string) string {
+	return "a()=" + a
 }
 
 func main() {
 	wheel := NewTimeWheel(60, 1, time.Second)
-	//另起协程轮询
+	fmt.Println("wheel: ", wheel)
 	go wheel.Start()
 
-	var ruTest Routers
-	crMap := make(ControllerMapsType, 0)
-	vf := reflect.ValueOf(&ruTest)
-	vft := vf.Type()
-	//读取方法数量
-	mNum := vf.NumMethod()
-	fmt.Println("NumMethod:", mNum)
-
-	//遍历路由器的方法，并将其存入控制器映射变量中
-	for i := 0; i < mNum; i++ {
-		mName := vft.Method(i).Name
-		fmt.Println("index:", i, " MethodName:", mName)
-		crMap[mName] = vf.Method(i)
+	//获取函数名和地址
+	funcV1 := reflect.ValueOf(add)
+	//funName := runtime.FuncForPC(reflect.ValueOf(add).Pointer()).Name()
+	//funName := funcV1.Type().Name()
+	//fmt.Println("函数信息：", funcV1, funName)
+	//获取函数参数
+	in := funcV1.Type().NumIn()
+	params := make([]interface{}, 0)
+	for i := 0; i < in; i++ {
+		params = append(params, i)
 	}
-	params := []reflect.Value{reflect.ValueOf("test the handle")}
+	fmt.Println("params: ", params)
+	wt := NewWorkTicker(1, add, params)
+	fmt.Println("workerTicker: ", wt)
 
-	NewWorkTicker(2, 4, crMap, params)
+	wheel.AddWorkTicker(wt)
+	fmt.Println("wheel: ", wheel)
+	//另起协程轮询时间轮
+	time.Sleep(120 * time.Second)
 }
