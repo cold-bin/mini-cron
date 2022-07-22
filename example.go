@@ -22,7 +22,7 @@ func old(a string) string {
 }
 
 func main() {
-	wheel := NewTimeWheel(60, 1, time.Second)
+	wheel := NewTimeWheel(12, 1, time.Second)
 	fmt.Println("wheel: ", wheel)
 	go wheel.Start()
 
