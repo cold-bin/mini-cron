@@ -137,24 +137,27 @@ func (tw *TimeWheel) Start() {
 			fmt.Println("stop over...")
 			return
 		case <-tw.TickerWheel.C: //时钟滴答一次，进一个槽位
-			tw.CurSlot++
-			tw.CurSlot = tw.CurSlot % tw.SlotsNum
-			//将当前定时器的挂载链表取出来，不包括头节点
-			wt := tw.Slots[tw.CurSlot]
-			tmp := wt.Next
-			for tmp != nil {
-				values, err := tmp.Execute()
-				if err != nil {
-					fmt.Println(err)
+			// 开个协程异步执行，增加时间轮的精度
+			go func(tw *TimeWheel) {
+				tw.CurSlot++
+				tw.CurSlot = tw.CurSlot % tw.SlotsNum
+				//将当前定时器的挂载链表取出来，不包括头节点
+				wt := tw.Slots[tw.CurSlot]
+				tmp := wt.Next
+				for tmp != nil {
+					values, err := tmp.Execute()
+					if err != nil {
+						fmt.Println(err)
+					}
+					//打印结果至终端
+					for _, v := range values {
+						fmt.Println("values: ", v.Int())
+					}
+					//fmt.Println("values: ", values[0].Int())
+					tmp = tmp.Next
 				}
-				//打印结果至终端
-				for _, v := range values {
-					fmt.Println("values: ", v.Int())
-				}
-				//fmt.Println("values: ", values[0].Int())
-				tmp = tmp.Next
-			}
-			fmt.Println("嘀嗒...")
+				fmt.Println("嘀嗒...")
+			}(tw)
 		default:
 		}
 	}
