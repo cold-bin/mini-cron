@@ -4,45 +4,37 @@
 package main
 
 import (
-	"fmt"
-	"reflect"
 	"time"
 )
 
-func add(a, b int) int {
-	return a + b
+type Struct struct {
+	A int
+	B string
+	C []byte
+	D time.Time
 }
 
-func sub(a, b int) int {
-	return a - b
-}
+func some(b uint8, a int, c string, d []byte, e Struct) (int, uint8, int, string, Struct) {
+	e.A = a
+	e.B = c
+	e.D = time.Now()
 
-func old(a string) string {
-	return "a()=" + a
+	return 2333, uint8(11), 3222, "hello world", e
 }
 
 func main() {
 	wheel := NewTimeWheel(12, 1, time.Second)
-	fmt.Println("wheel: ", wheel)
 	go wheel.Start()
+	////获取函数名和地址
+	params := make([]interface{}, 0, 5)
+	params = append(params, uint8(2))
+	params = append(params, 1)
+	params = append(params, "hello world")
+	params = append(params, []byte("abcdef"))
+	params = append(params, *new(Struct))
 
-	//获取函数名和地址
-	funcV1 := reflect.ValueOf(add)
-	//funName := runtime.FuncForPC(reflect.ValueOf(add).Pointer()).Name()
-	//funName := funcV1.Type().Name()
-	//fmt.Println("函数信息：", funcV1, funName)
-	//获取函数参数
-	in := funcV1.Type().NumIn()
-	params := make([]interface{}, 0)
-	for i := 0; i < in; i++ {
-		params = append(params, i)
-	}
-	fmt.Println("params: ", params)
-	wt := NewWorkTicker(1, add, params)
-	fmt.Println("workerTicker: ", wt)
-
+	wt := NewWorkTicker(1, some, params)
 	wheel.AddWorkTicker(wt)
-	fmt.Println("wheel: ", wheel)
 	//另起协程轮询时间轮
 	time.Sleep(120 * time.Second)
 }

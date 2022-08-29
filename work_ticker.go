@@ -5,7 +5,7 @@ package main
 
 import (
 	"errors"
-	"fmt"
+	"log"
 	"reflect"
 )
 
@@ -45,7 +45,7 @@ func (wt *WorkTicker) Execute() ([]reflect.Value, error) {
 		return nil, errors.New("workTicker do not contain func type")
 	}
 	//取出函数的参数
-	fmt.Println("参数个数：", len(wt.FunParams), f.Type().NumIn())
+	log.Println("参数个数：", len(wt.FunParams), f.Type().NumIn())
 	if len(wt.FunParams) != f.Type().NumIn() {
 		return nil, errors.New("the number of input params not match")
 	}

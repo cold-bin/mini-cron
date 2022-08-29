@@ -134,7 +134,7 @@ func (tw *TimeWheel) Start() {
 	for {
 		select {
 		case <-tw.StopSignal: //结束信号
-			fmt.Println("stop over...")
+			log.Println("stop over...")
 			return
 		case <-tw.TickerWheel.C: //时钟滴答一次，进一个槽位
 			// 开个协程异步执行，增加时间轮的精度
@@ -151,12 +151,11 @@ func (tw *TimeWheel) Start() {
 					}
 					//打印结果至终端
 					for _, v := range values {
-						fmt.Println("values: ", v.Int())
+						log.Println("values: ", v)
 					}
-					//fmt.Println("values: ", values[0].Int())
 					tmp = tmp.Next
 				}
-				fmt.Println("嘀嗒...")
+				//log.Println("嘀嗒...")
 			}(tw)
 		default:
 		}
